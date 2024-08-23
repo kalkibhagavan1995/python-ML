@@ -7,6 +7,12 @@ from sklearn.model_selection import train_test_split
 from statsmodels.api import OLS
 import os
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score,f1_score, precision_score, recall_score,ConfusionMatrixDisplay,roc_curve,auc
+from imblearn.over_sampling import SMOTE
 
 
 st.set_page_config(layout="wide")
@@ -148,18 +154,20 @@ if file_upload:
     with feature_selection:
         check_feat_sele = st.radio('select feature selection method', ['None', 'P-value', 'VIF', 'Dropping constants'], horizontal=True)
         if check_feat_sele == 'P-value':
+            alpha_value = float(st.text_input('enter alpha value'))
             new_df = pd.get_dummies(data_df)
             X = new_df.drop(user_output_col, axis=1)
             y = new_df[user_output_col]
             X_train, X_test,y_train,y_test = train_test_split(X, y, random_state=123, test_size=0.2)
             model = OLS(y_train.astype(float),X_train.astype(float)).fit()
             d = {}
-            try:
-                for i in X_train.columns.tolist():
+            for i in X_train.columns.tolist():
+                if model.pvalues[i] > alpha_value:
                     d[f'{i}'] = model.pvalues[i]
                 print(d)
-                st.markdown("it is under development")
-            except:
-                print('error')
+            high_p_value_cols = list(d.keys())
+            processed_df = data_df.drop(high_p_value_cols, axis=1)
+            global p_value
+            p_value = True
         if check_feat_sele == 'VIF':
             pass
