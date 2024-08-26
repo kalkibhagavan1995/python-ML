@@ -5,22 +5,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from statsmodels.api import OLS
-import os
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score,f1_score, precision_score, recall_score,ConfusionMatrixDisplay,roc_curve,auc
 from imblearn.over_sampling import SMOTE
 
-
+global p_value, processed_df
 st.set_page_config(layout="wide")
 
 file_upload = st.file_uploader("upload csv file")
 if file_upload:
     csv_data = pd.read_csv(file_upload)
-
     data_df = csv_data
     st.dataframe(data_df)
     if st.checkbox("if NA present drop NA"):
@@ -158,6 +155,7 @@ if file_upload:
             new_df = pd.get_dummies(data_df)
             X = new_df.drop(user_output_col, axis=1)
             y = new_df[user_output_col]
+            # todo : select random state and test_size custom in feature
             X_train, X_test,y_train,y_test = train_test_split(X, y, random_state=123, test_size=0.2)
             model = OLS(y_train.astype(float),X_train.astype(float)).fit()
             d = {}
@@ -167,7 +165,55 @@ if file_upload:
                 print(d)
             high_p_value_cols = list(d.keys())
             processed_df = data_df.drop(high_p_value_cols, axis=1)
-            global p_value
             p_value = True
         if check_feat_sele == 'VIF':
+            X = data_df.drop(user_output_col, axis=1)
+            y = data_df[user_output_col]
+            vif = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+            vif_dataframe = pd.DataFrame(vif, index=[X.columns], columns=['VIF'])
+            vif_custom = eval(st.text_input("vif value"))
+            print(vif_dataframe)
+            selected_columns = vif_dataframe[vif_dataframe['VIF'] < vif_custom]
+            selected_cols_list = [i[0] for i in selected_columns.index]
+            new_vif_data_df = data_df[selected_cols_list]
+            print(new_vif_data_df.head())
+            ss = StandardScaler()
+            for each in num_cols:
+                data_df[each] = ss.fit_transform(data_df[[each]])
+            processed_df = pd.DataFrame(data_df, columns=selected_cols_list)
+            processed_df[user_output_col] = data_df[user_output_col]
+    with ml_algo:
+        selected_ml = st.radio("select required ml model",['None', 'Linear model', 'Logistic model','KNN model', 'Naivebayes model','DecisionTree model'])
+        # todo: convert output col to numeric if it is categorical type
+        X = processed_df.drop(user_output_col, axis=1)
+        y = processed_df[user_output_col]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        if selected_ml == 'None':
             pass
+        elif selected_ml == 'Linear model':
+            from sklearn.linear_model import LinearRegression
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            print(predictions)
+        elif selected_ml == 'Logistic model':
+            from sklearn.linear_model import LogisticRegression
+            lg_model = LogisticRegression(solver='saga', max_iter=1000, random_state=43)
+            lg_model.fit(X_train, y_train)
+            y_pred_log = lg_model.predict(X_test)
+        elif selected_ml == 'KNN model':
+            from sklearn.neighbors import KNeighborsClassifier
+            k = 5
+            knn_classifier = KNeighborsClassifier(n_neighbors=k)
+            knn_classifier.fit(X_train, y_train)
+            y_pred = knn_classifier.predict(X_train)
+        elif selected_ml == 'Naivebayes model':
+            from sklearn.naive_bayes import GaussianNB
+            nb_classifier = GaussianNB()
+            nb_classifier.fit(X_train, y_train)
+            y_pred = nb_classifier.predict(X_test)
+        elif selected_ml == 'DecisionTree model':
+            from sklearn.tree import DecisionTreeClassifier
+            dt_clf = DecisionTreeClassifier()
+            dt_clf.fit(X_train, y_train)
+            y_pred_dt = dt_clf.predict(X_test)
